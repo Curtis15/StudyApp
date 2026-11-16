@@ -268,7 +268,7 @@ fun AllSessionScreen(viewModel: MainViewModel, navController: NavController){
         OutlinedTextField(
             value = viewModel.courseFilter,
             onValueChange = {viewModel.updateCourseFilter(it)},
-            label = {Text("Course (like CS 3203)")},
+            label = {Text("Course Name")},
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
