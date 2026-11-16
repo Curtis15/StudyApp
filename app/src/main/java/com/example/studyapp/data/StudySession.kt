@@ -11,8 +11,6 @@ data class StudySession(
     val endTime: Long,
     val maxStudents: Int,
     val hostName: String,
-    val memberNames: List<String>,
+    var memberNames: MutableList<String>,
     val isEnded: Boolean = false
 )
-
-data class User(val name: String)

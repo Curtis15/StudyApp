@@ -25,5 +25,3 @@ fun AppNavigation(viewModel: MainViewModel) {
         }
     }
 }
-
-

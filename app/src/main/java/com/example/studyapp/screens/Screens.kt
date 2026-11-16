@@ -1,6 +1,8 @@
 package com.example.studyapp.screens
 
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,7 +41,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Switch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -49,14 +50,23 @@ import com.example.studyapp.data.StudySession
 import com.example.studyapp.map.openMaps
 import com.example.studyapp.notifications.reminder
 import com.example.studyapp.notifications.showCancel
+import java.util.Calendar
 import java.util.UUID
 
 
 @Composable
 fun LoginScreen(viewModel: MainViewModel, navController: NavController){
     var name by remember {mutableStateOf("")}
+    var email by remember {mutableStateOf("")}
+    var password by remember {mutableStateOf("")}
+    var isRegister by remember {mutableStateOf(false)}
+    var error by remember {mutableStateOf<String?>(null)}
+
+    val canSubmit = email.isNotBlank() && password.isNotBlank() &&
+            (!isRegister || name.isNotBlank())
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ){
         Text(
@@ -65,39 +75,81 @@ fun LoginScreen(viewModel: MainViewModel, navController: NavController){
         )
 
         Spacer(modifier = Modifier.height(16.dp))
-    }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ){
         Text(
-            text = "Log in",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
-        Text(text = "Enter your name to continue")
-        OutlinedTextField(
-            value = name,
-            onValueChange = {name = it},
-            label = {Text("Your name")},
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            if (isRegister) "Create account"
+            else "Log in",
+            style = MaterialTheme.typography.titleLarge
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        if (isRegister) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = {Text("Name")},
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            label = {Text("Email")},
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = password,
+            onValueChange = {password = it},
+            label = {Text("Password")},
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
         Button(
             onClick = {
-                viewModel.login(name.trim())
-                navController.navigate("home") {
-                    popUpTo("login") {inclusive = true}
+                val cleanEmail = email.trim().lowercase()
+                val pass = if (isRegister)
+                    viewModel.register(name.trim(), cleanEmail, password)
+                else
+                    viewModel.emailLogin(cleanEmail, password)
+
+                if (pass) {
+                    navController.navigate("home") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                } else {
+                    error = if (isRegister) "That email is already registered"
+                    else "Wrong email or password"
                 }
             },
-            enabled = name.isNotBlank(),
+            enabled = canSubmit,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Log in")
+            Text(
+                if (isRegister)
+                "Create account"
+                else
+                "Log in"
+            )
+        }
+
+        TextButton(onClick = {
+            isRegister = !isRegister
+            error = null
+        }) {
+            Text(
+                if (isRegister)
+                "Already have an account? Log in"
+                else
+                "No account? Register"
+            )
         }
     }
 }
@@ -397,25 +449,59 @@ fun DetailsScreen(sessionId: String, viewModel: MainViewModel, navController: Na
 
 @Composable
 fun CreateSessionScreen(viewModel: MainViewModel, navController: NavController){
-    var title by remember {mutableStateOf("")}
-    var course by remember {mutableStateOf("")}
+    var title by remember { mutableStateOf("") }
+    var course by remember { mutableStateOf("") }
     var room by remember { mutableStateOf("") }
-    var building by remember {mutableStateOf("")}
-    var maxStudents by remember {mutableStateOf("")}
-    var startTime by remember {mutableStateOf("")}
-    var menuOpen by remember {mutableStateOf(false)}
-    var startNow by remember {mutableStateOf(false)}
-    var sessionLength by remember {mutableStateOf("")}
+    var building by remember { mutableStateOf("") }
+    var maxStudents by remember { mutableStateOf("") }
+    var sessionLength by remember { mutableStateOf("") }
+    var menuOpen by remember { mutableStateOf(false) }
+    var startDate by remember {mutableStateOf("Pick a date")}
+    var startMillis by remember {mutableStateOf(System.currentTimeMillis() + 60 * 60_000L)}
+    var clock by remember {mutableStateOf("Pick a time")}
 
+    val context = LocalContext.current
+    val today = Calendar.getInstance()
+    val datePicker = DatePickerDialog(
+        context,
+        { _, year, month, day -> startDate = "${month + 1}/$day/$year"
+            startMillis = Calendar.getInstance().apply {
+            timeInMillis = startMillis
+            set(year, month, day)}.timeInMillis
+        },
+        today.get(Calendar.YEAR),
+        today.get(Calendar.MONTH),
+        today.get(Calendar.DAY_OF_MONTH)
+    )
+    val now = Calendar.getInstance()
+    val timePicker = TimePickerDialog(
+        context,
+        { _, hour, minute ->
+            clock = "${if (hour % 12 == 0) 12
+            else hour % 12}:${minute.toString().padStart(2, '0')
+            } ${if (hour < 12) "AM"
+            else "PM"}"
+            startMillis = Calendar.getInstance().apply {
+                timeInMillis = startMillis
+                set(Calendar.HOUR_OF_DAY, hour)
+                set(Calendar.MINUTE, minute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        },
+        now.get(Calendar.HOUR_OF_DAY),
+        now.get(Calendar.MINUTE),
+        false
+    )
     val duration = sessionLength.toIntOrNull()
     val max = maxStudents.toIntOrNull()
-    val startIn = if (startNow) 0
-        else startTime.toIntOrNull()
+    val startInFuture = startMillis > System.currentTimeMillis()
+
     val canCreate = title.isNotBlank() &&
             course.isNotBlank() &&
             building.isNotBlank() &&
             max != null && max >= 2 &&
-            startIn != null &&
+            startInFuture &&
             duration != null && duration > 0
     Column(
         modifier = Modifier
@@ -494,24 +580,19 @@ fun CreateSessionScreen(viewModel: MainViewModel, navController: NavController){
             modifier = Modifier.fillMaxWidth()
         )
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = startNow, onCheckedChange = {startNow = it})
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Start now")
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {datePicker.show()}) {
+                Text(startDate)
+            }
+            Button(onClick = { timePicker.show() }) {
+                Text(clock)
+            }
         }
 
-        if (!startNow) {
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = startTime,
-                onValueChange = {startTime = it.filter { c -> c.isDigit() }},
-                label = {Text("Starts in (min)")},
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
         Spacer(modifier = Modifier.height(8.dp))
+
         OutlinedTextField(
             value = sessionLength,
             onValueChange = {sessionLength = it.filter {c -> c.isDigit()}},
@@ -520,9 +601,10 @@ fun CreateSessionScreen(viewModel: MainViewModel, navController: NavController){
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
+
         Button(onClick = {
-            if (max != null && startIn != null && duration != null) {
-                val start = System.currentTimeMillis() + startIn * 60_000L
+            val start = startMillis
+            if (max != null &&  duration != null) {
                 val end = start + duration * 60_000L
                 val host = viewModel.currentUser?.name ?: ""
 
@@ -537,7 +619,7 @@ fun CreateSessionScreen(viewModel: MainViewModel, navController: NavController){
                         endTime = end,
                         maxStudents = max,
                         hostName = host,
-                        memberNames = listOf(host)
+                        memberNames = listOf(host).toMutableList()
                     )
                 )
                 navController.popBackStack()
